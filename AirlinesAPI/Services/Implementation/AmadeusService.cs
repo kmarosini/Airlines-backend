@@ -22,14 +22,12 @@ namespace AirlinesAPI.Services.Implementation
 
         public async Task<FlightOffers> GetFlightOffersAsync(FlightParameters flightParameters)
         {
-            // Check if the search parameters already exist in the database
             FlightOffers existingOffers = GetFlightOffersFromDatabase(flightParameters);
             if (existingOffers != null)
             {
                 return existingOffers;
             }
 
-            // Retrieve the access token using the TokenService instance
             string accessToken = await _tokenService.GetTokenAsync();
 
             if (accessToken == null)
@@ -38,7 +36,6 @@ namespace AirlinesAPI.Services.Implementation
                 return null;
             }
 
-            // Constructing the query parameters
             string queryString = $"?originLocationCode={flightParameters.DepartureAirport}" +
                                  $"&destinationLocationCode={flightParameters.DestinationAirport}" +
                                  $"&departureDate={flightParameters.DepartureDate}" +
@@ -48,7 +45,6 @@ namespace AirlinesAPI.Services.Implementation
                                  $"&max={flightParameters.Max}" +
                                  $"&nonStop=true";
 
-            // Constructing the full URL with query parameters
             string urlWithQuery = _amadeusConfig.BaseUrl + queryString;
 
             using (HttpClient client = new HttpClient())
@@ -99,14 +95,7 @@ namespace AirlinesAPI.Services.Implementation
                 command.Parameters.AddWithValue("@DepartureDate", flightParameters.DepartureDate);
                 command.Parameters.AddWithValue("@ReturnDate", (object)flightParameters.ReturnDate ?? DBNull.Value);
                 command.Parameters.AddWithValue("@NumberOfPassengers", flightParameters.NumberOfPassengers);
-                command.Parameters.AddWithValue("@Currency", flightParameters.Currency);
-
-                // Log the SQL command and parameter values
-                Console.WriteLine("Executing SQL Command: {0}", command.CommandText);
-                foreach (SqlParameter parameter in command.Parameters)
-                {
-                    Console.WriteLine("Parameter {0}: {1}", parameter.ParameterName, parameter.Value);
-                }
+                command.Parameters.AddWithValue("@Currency", flightParameters.Currency);               
 
                 using (SqlDataReader reader = command.ExecuteReader())
                 {
@@ -138,16 +127,16 @@ namespace AirlinesAPI.Services.Implementation
                                                 departure = new FlightOffers.Departure
                                                 {
                                                     iataCode = reader["DepartureAirport"].ToString(),
-                                                    at = departureDate // Set the parsed departure date
+                                                    at = departureDate 
                                                 },
                                                 arrival = new FlightOffers.Arrival
                                                 {
                                                     iataCode = reader["DestinationAirport"].ToString(),
-                                                    at = returnDate // Set the parsed return date
+                                                    at = returnDate 
                                                 }
                                             }
                                         },
-                                        duration = "N/A" // Duration is not available in the table
+                                        duration = "N/A" 
                                     }
                                 },
                                 price = new FlightOffers.Price
@@ -171,7 +160,6 @@ namespace AirlinesAPI.Services.Implementation
 
         private void SaveFlightOffersToDatabase(FlightParameters flightParameters, FlightOffers flightOffers)
         {
-            // Set the current thread's culture to the invariant culture
             CultureInfo originalCulture = Thread.CurrentThread.CurrentCulture;
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
@@ -181,7 +169,6 @@ namespace AirlinesAPI.Services.Implementation
                 {
                     connection.Open();
 
-                    // Insert search parameters
                     SqlCommand searchParamsCommand = new SqlCommand(
                         "INSERT INTO SearchParams (DepartureAirport, DestinationAirport, DepartureDate, ReturnDate, NumberOfPassengers, Currency, Max) " +
                         "OUTPUT INSERTED.Id " +
@@ -197,7 +184,6 @@ namespace AirlinesAPI.Services.Implementation
 
                     int searchParamsId = (int)searchParamsCommand.ExecuteScalar();
 
-                    // Insert flight offers
                     foreach (FlightOffers.Data offer in flightOffers.data)
                     {
                         foreach (FlightOffers.Itinerary itinerary in offer.itineraries)
