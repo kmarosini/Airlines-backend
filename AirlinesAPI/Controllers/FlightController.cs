@@ -24,11 +24,11 @@ namespace AirlinesAPI.Controllers
             if (flightOffers != null)
             {
                 
-                return Ok(flightOffers); // Return the flight offers if retrieval was successful
+                return Ok(flightOffers);
             }
             else
             {
-                return StatusCode(500); // Return a server error if retrieval failed
+                return StatusCode(500);
             }
         }
     }

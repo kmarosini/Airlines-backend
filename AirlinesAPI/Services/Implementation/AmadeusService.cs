@@ -13,8 +13,6 @@ namespace AirlinesAPI.Services.Implementation
         private readonly string _connectionString;
         private readonly AmadeusConfiguration _amadeusConfig;
 
-
-
         public AmadeusService(TokenService tokenService, IOptions<AmadeusConfiguration> amadeusConfig, IConfiguration configuration)
         {
             _tokenService = tokenService;
@@ -25,7 +23,7 @@ namespace AirlinesAPI.Services.Implementation
         public async Task<FlightOffers> GetFlightOffersAsync(FlightParameters flightParameters)
         {
             // Check if the search parameters already exist in the database
-            var existingOffers = GetFlightOffersFromDatabase(flightParameters);
+            FlightOffers existingOffers = GetFlightOffersFromDatabase(flightParameters);
             if (existingOffers != null)
             {
                 return existingOffers;
@@ -41,27 +39,28 @@ namespace AirlinesAPI.Services.Implementation
             }
 
             // Constructing the query parameters
-            var queryString = $"?originLocationCode={flightParameters.DepartureAirport}" +
-                              $"&destinationLocationCode={flightParameters.DestinationAirport}" +
-                              $"&departureDate={flightParameters.DepartureDate}" +
-                              $"&returnDate={flightParameters.ReturnDate}" +
-                              $"&adults={flightParameters.NumberOfPassengers}" +
-                              $"&currencyCode={flightParameters.Currency}" +
-                              $"&max={flightParameters.Max}";
+            string queryString = $"?originLocationCode={flightParameters.DepartureAirport}" +
+                                 $"&destinationLocationCode={flightParameters.DestinationAirport}" +
+                                 $"&departureDate={flightParameters.DepartureDate}" +
+                                 $"&returnDate={flightParameters.ReturnDate}" +
+                                 $"&adults={flightParameters.NumberOfPassengers}" +
+                                 $"&currencyCode={flightParameters.Currency}" +
+                                 $"&max={flightParameters.Max}" +
+                                 $"&nonStop=true";
 
             // Constructing the full URL with query parameters
             string urlWithQuery = _amadeusConfig.BaseUrl + queryString;
 
-            using (var client = new HttpClient())
+            using (HttpClient client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
-                var response = await client.GetAsync(urlWithQuery);
+                HttpResponseMessage response = await client.GetAsync(urlWithQuery);
 
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    var flightOffers = JsonSerializer.Deserialize<FlightOffers>(responseContent);
+                    string responseContent = await response.Content.ReadAsStringAsync();
+                    FlightOffers flightOffers = JsonSerializer.Deserialize<FlightOffers>(responseContent);
 
                     if (flightOffers != null)
                     {
@@ -80,11 +79,11 @@ namespace AirlinesAPI.Services.Implementation
 
         private FlightOffers GetFlightOffersFromDatabase(FlightParameters flightParameters)
         {
-            using (var connection = new SqlConnection(_connectionString))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
 
-                var command = new SqlCommand(
+                SqlCommand command = new SqlCommand(
                     "SELECT DepartureAirport, DestinationAirport, DepartureDate, ReturnDate, " +
                     "OutboundStops, InboundStops, NumberOfPassengers, Currency, TotalPrice " +
                     "FROM FlightOffersData " +
@@ -109,11 +108,11 @@ namespace AirlinesAPI.Services.Implementation
                     Console.WriteLine("Parameter {0}: {1}", parameter.ParameterName, parameter.Value);
                 }
 
-                using (var reader = command.ExecuteReader())
+                using (SqlDataReader reader = command.ExecuteReader())
                 {
                     if (reader.HasRows)
                     {
-                        var flightOffers = new FlightOffers
+                        FlightOffers flightOffers = new FlightOffers
                         {
                             data = new List<FlightOffers.Data>()
                         };
@@ -126,31 +125,31 @@ namespace AirlinesAPI.Services.Implementation
                             DateTime returnDate;
                             DateTime.TryParse(reader["ReturnDate"].ToString(), out returnDate);
 
-                            var offer = new FlightOffers.Data
+                            FlightOffers.Data offer = new FlightOffers.Data
                             {
                                 itineraries = new List<FlightOffers.Itinerary>
-                        {
-                            new FlightOffers.Itinerary
-                            {
-                                segments = new List<FlightOffers.Segment>
                                 {
-                                    new FlightOffers.Segment
+                                    new FlightOffers.Itinerary
                                     {
-                                        departure = new FlightOffers.Departure
+                                        segments = new List<FlightOffers.Segment>
                                         {
-                                            iataCode = reader["DepartureAirport"].ToString(),
-                                            at = departureDate // Set the parsed departure date
+                                            new FlightOffers.Segment
+                                            {
+                                                departure = new FlightOffers.Departure
+                                                {
+                                                    iataCode = reader["DepartureAirport"].ToString(),
+                                                    at = departureDate // Set the parsed departure date
+                                                },
+                                                arrival = new FlightOffers.Arrival
+                                                {
+                                                    iataCode = reader["DestinationAirport"].ToString(),
+                                                    at = returnDate // Set the parsed return date
+                                                }
+                                            }
                                         },
-                                        arrival = new FlightOffers.Arrival
-                                        {
-                                            iataCode = reader["DestinationAirport"].ToString(),
-                                            at = returnDate // Set the parsed return date
-                                        }
+                                        duration = "N/A" // Duration is not available in the table
                                     }
                                 },
-                                duration = "N/A" // Duration is not available in the table
-                            }
-                        },
                                 price = new FlightOffers.Price
                                 {
                                     currency = reader["Currency"].ToString(),
@@ -170,8 +169,6 @@ namespace AirlinesAPI.Services.Implementation
             return null;
         }
 
-
-
         private void SaveFlightOffersToDatabase(FlightParameters flightParameters, FlightOffers flightOffers)
         {
             // Set the current thread's culture to the invariant culture
@@ -180,12 +177,12 @@ namespace AirlinesAPI.Services.Implementation
 
             try
             {
-                using (var connection = new SqlConnection(_connectionString))
+                using (SqlConnection connection = new SqlConnection(_connectionString))
                 {
                     connection.Open();
 
                     // Insert search parameters
-                    var searchParamsCommand = new SqlCommand(
+                    SqlCommand searchParamsCommand = new SqlCommand(
                         "INSERT INTO SearchParams (DepartureAirport, DestinationAirport, DepartureDate, ReturnDate, NumberOfPassengers, Currency, Max) " +
                         "OUTPUT INSERTED.Id " +
                         "VALUES (@DepartureAirport, @DestinationAirport, @DepartureDate, @ReturnDate, @NumberOfPassengers, @Currency, @Max)", connection);
@@ -198,17 +195,17 @@ namespace AirlinesAPI.Services.Implementation
                     searchParamsCommand.Parameters.AddWithValue("@Currency", flightParameters.Currency);
                     searchParamsCommand.Parameters.AddWithValue("@Max", (object)flightParameters.Max ?? DBNull.Value);
 
-                    var searchParamsId = (int)searchParamsCommand.ExecuteScalar();
+                    int searchParamsId = (int)searchParamsCommand.ExecuteScalar();
 
                     // Insert flight offers
-                    foreach (var offer in flightOffers.data)
+                    foreach (FlightOffers.Data offer in flightOffers.data)
                     {
-                        foreach (var itinerary in offer.itineraries)
+                        foreach (FlightOffers.Itinerary itinerary in offer.itineraries)
                         {
-                            var departureSegment = itinerary.segments.First();
-                            var returnSegment = itinerary.segments.Last();
+                            FlightOffers.Segment departureSegment = itinerary.segments.First();
+                            FlightOffers.Segment returnSegment = itinerary.segments.Last();
 
-                            var command = new SqlCommand(
+                            SqlCommand command = new SqlCommand(
                                 "INSERT INTO FlightOffersData (DepartureAirport, DestinationAirport, DepartureDate, ReturnDate, OutboundStops, InboundStops, NumberOfPassengers, Currency, TotalPrice, SearchParamsId) " +
                                 "VALUES (@DepartureAirport, @DestinationAirport, @DepartureDate, @ReturnDate, @OutboundStops, @InboundStops, @NumberOfPassengers, @Currency, @TotalPrice, @SearchParamsId)", connection);
 
